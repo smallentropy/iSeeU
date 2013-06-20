@@ -16,7 +16,7 @@
 #import "NSString+Addons.h"
 
 #define CAPTURE_FPS 30
-#define LEARN_FPS 60
+#define LEARN_FPS 30
 #define RADIANS(degrees) ((degrees * M_PI) / 180.0)
 
 @interface ViewController () <UINavigationControllerDelegate, UIImagePickerControllerDelegate>
@@ -37,8 +37,10 @@
 @property (nonatomic) NSInteger frameNum;
 @property (nonatomic, assign) CGRect faceVisibilityRect;
 @property (nonatomic, assign) BOOL indicatorVisible;
-
 @property (nonatomic, strong) CALayer *featureLayer;
+
+@property (nonatomic, assign) NSInteger picsTaken;
+@property (nonatomic, assign) NSInteger personId;
 
 @end
 
@@ -53,9 +55,9 @@
             self.indicatorVisible = visible;
             CGRect rect = self.faceVisibilityIndicator.frame;
             rect.origin.y += visible ? rect.size.height : -rect.size.height;
-            //self.faceVisibilityIndicator.frame = rect;
             [UIView animateWithDuration:0.3 animations:^{
                 self.faceVisibilityIndicator.frame = rect;
+                self.faceVisibilityIndicator.alpha = visible ? 1.0 : 0.0f;
             }];
         });
     }
@@ -129,17 +131,26 @@
         const std::vector<cv::Rect> &faces = [self.faceDetector facesFromImage:image];
         
         if (faces.size() == 1 && ![self.textField.text isEmpty]) {
-            int personId = [self.faceRecognizer newPersonWithName:self.textField.text];
-            [self.faceRecognizer learnFace:faces[0] ofPersonID:personId fromImage:image];
-            self.learn = NO;
+            [self.faceRecognizer learnFace:faces[0] ofPersonID:self.personId fromImage:image];
+            self.picsTaken++;
             self.frameNum = 0;
             
             dispatch_async(dispatch_get_main_queue(), ^{
-                self.modelAvailable = [self.faceRecognizer trainModel];
-                self.segmentedControl.selectedSegmentIndex = 0;
-                [self.segmentedControl sendActionsForControlEvents:UIControlEventValueChanged];
-                [self recognize:YES];
+                self.progressBar.progress = self.picsTaken / 30.0f;
             });
+            
+            if (self.picsTaken == 30) {
+                self.learn = NO;
+                self.picsTaken = 0;
+                
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    self.modelAvailable = [self.faceRecognizer trainModel];
+                    [self showProgressView:NO];
+                    self.segmentedControl.selectedSegmentIndex = 0;
+                    [self.segmentedControl sendActionsForControlEvents:UIControlEventValueChanged];
+                    [self recognize:YES];
+                });
+            }
         }
     }
     
@@ -171,7 +182,7 @@
     [self setupCamera];
     
     self.faceDetector = [[FaceDetector alloc] init];
-    self.faceRecognizer = [[CustomFaceRecognizer alloc] initWithLBPHFaceRecognizer];
+    self.faceRecognizer = [[CustomFaceRecognizer alloc] initWithEigenFaceRecognizer];
     self.modelAvailable = [self.faceRecognizer trainModel];
     self.faceVisibilityRect = self.faceVisibilityIndicator.frame;
     self.recognize = YES;
@@ -196,8 +207,8 @@
     
     CGRect rect = self.imageView.frame;
     
-    self.leftUpper.frame = CGRectMake(rect.origin.x - 65, rect.origin.y + 120, 100, 51);
-    self.rightUpper.frame = CGRectMake(rect.origin.x + rect.size.width - 36, rect.origin.y + 120, 100, 51);
+    self.leftUpper.frame = CGRectMake(rect.origin.x - 65, rect.origin.y + 100, 100, 51);
+    self.rightUpper.frame = CGRectMake(rect.origin.x + rect.size.width - 36, rect.origin.y + 100, 100, 51);
 
     self.rightUpper.transform = CGAffineTransformMakeScale(-1, 1);
     
@@ -216,7 +227,8 @@
     
     self.saveButton.alpha = 0.0f;
     self.textField.alpha = 0.0f;
-    //self.faceVisibilityIndicator.alpha = 0.0f;
+    self.faceVisibilityIndicator.alpha = 0.0f;
+    self.progressBar.alpha = 0.0f;
     self.indicatorVisible = NO;
     
     self.imageView.image = self.faceImage;
@@ -234,9 +246,19 @@
     }];
 }
 
+- (void)showProgressView:(BOOL)show {    
+    [UIView animateWithDuration:0.3 animations:^{
+        self.progressBar.alpha = show ? 1.0f : 0.0f;
+    } completion:^(BOOL finished) {
+        self.progressBar.progress = 0.0;
+    }];
+}
+
 #pragma mark - IBActions
 - (void)saveTapped:(id)sender {
     if (![self.textField.text isEmpty]) {
+        self.personId = [self.faceRecognizer newPersonWithName:self.textField.text];
+        [self showProgressView:YES];
         [self.videoCamera start];
     }
 }

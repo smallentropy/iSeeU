@@ -17,6 +17,7 @@
 @property (nonatomic, weak) IBOutlet UIButton *saveButton;
 @property (nonatomic, weak) IBOutlet UILabel *matchLabel;
 @property (nonatomic, weak) IBOutlet UISegmentedControl *segmentedControl;
+@property (nonatomic, weak) IBOutlet UIProgressView *progressBar;
 
 - (IBAction)saveTapped:(id)sender;
 - (IBAction)segmentedValueChanged:(id)sender;
